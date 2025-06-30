@@ -1,0 +1,18 @@
+[Unit]
+Description=SolarFlow Sniffer to MQTT
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/sys/class/net/wlan0 
+
+[Service]
+Type=simple
+User=nobody
+WorkingDirectory=/opt/SF800Pro2MQTT
+ExecStart=/opt/SF800Pro2MQTT/.venv/bin/python sf800psniff2mqtt.py
+# ---- capabilities ----
+CapabilityBoundingSet=CAP_NET_RAW          # limit to this single cap
+AmbientCapabilities=CAP_NET_RAW            # pass it to the process
+NoNewPrivileges=yes                        # block later priv-escalation
+
+[Install]
+WantedBy=multi-user.target

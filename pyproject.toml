@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "sniff2mqtt"
+version = "0.1.0"
+description = "Sniffer for SolarFlow 800 Pro and MQTT publishing."
+authors = ["Ixtalo <ixtalo@users.noreply.github.com>"]
+license = "AGPL"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+scapy = "^2.6.1"
+python-dotenv = "^1.1.1"
+paho-mqtt = "^2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
