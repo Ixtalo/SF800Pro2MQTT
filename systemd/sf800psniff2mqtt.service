@@ -2,7 +2,7 @@
 Description=SolarFlow Sniffer to MQTT
 Wants=network-online.target
 After=network-online.target
-ConditionPathExists=/sys/class/net/wlan0 
+ConditionPathExists=/sys/class/net/wlan0
 
 [Service]
 Type=simple

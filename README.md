@@ -1,9 +1,9 @@
 # SolarFlow 800 Pro to Mqtt (via network traffic sniffing)
 
-Capture TCP traffic from a SolarFlow 800 Pro solar battery and 
+Capture TCP traffic from a SolarFlow 800 Pro solar battery and
 extract information for publishing to an own (local) MQTT broker.
 
-The tool is intended for quick, non-intrusive integrations of the “cloud only” / 
+The tool is intended for quick, non-intrusive integrations of the “cloud only” /
 "app only" IoT device, here the solar battery *SolarFlow 800 Pro*.
 
 ## Motivation
@@ -36,7 +36,7 @@ flowchart TD
     Server ==tcp capture/sniff==> Sniffer[/**SF800Pro2MQTT**/] --mqtt--> Server
     end
 
-    SF800Pro[fa:fa-car-battery SF800Pro] 
+    SF800Pro[fa:fa-car-battery SF800Pro]
     SF800Pro ==fa:fa-wifi IoT SSID==> USBWifi
 
     Server --tcp fwd--> Internet([fa:fa-cloud Internet])
@@ -82,3 +82,137 @@ For permanent installation have a look at `systemd/`.
 | `/R3mn8U/deviceId/function/invoke` | `{"messageId":669682,"function":"hemsEP","arguments":{"outputPower":0,"chargePower":125, ...}}` |
 | `/R3mn8U/deviceId/function/invoke/reply` | `{"messageId":669682,"mode":9,"chargeMode":3,"timestamp":1751115741,"success":true}` |
 | `/R3mn8U/deviceId/properties/energy` | `{"messageId":13747,"timestamp":1751115744,"properties":{"gridOffPower":0,"chargePower":0, ...}}` |
+
+
+## Solar Flow 800 Pro MQTT Values
+
+
+| **Field Name**                     | **Field Description (presumably)**                                   |
+|------------------------------------|-----------------------------------------------------------------------|
+| report.deviceId                    | Unique ID of the solar battery device.                                |
+| report.messageId                   | Sequential message identifier.                                        |
+| report.product                     | Device model name.                                                    |
+| report.timestamp                   | Epoch timestamp when data was recorded.                               |
+| report.version                     | Message format versio (in 07/2025 it is '2').                         |
+| report.packData[]                  | List of battery pack metrics (can contain multiple entries).          |
+| report.packData[].batcur           | Battery current (unit likely deci-amps, raw value may need scaling).  |
+| report.packData[].maxTemp          | Battery pack temperature; Celsius = (value / 10) - 273.15             |
+| report.packData[].maxVol           | Maximum cell voltage (unit tenths of volt).                           |
+| report.packData[].minVol           | Minimum cell voltage (unit tenths of volt).                           |
+| report.packData[].packType         | Encoded type or configuration of the battery pack.                    |
+| report.packData[].power            | Power value (watts).                                                  |
+| report.packData[].sn               | Serial number of the battery pack.                                    |
+| report.packData[].socLevel         | State of charge (percentage).                                         |
+| report.packData[].softVersion      | Firmware (software) version (e.g., 4117).                             |
+| report.packData[].state            | Operational state code (0=idle, 1=charging, 2=discharing).            |
+| report.packData[].totalVol         | Total voltage of the battery pack                                     |
+| report.properties                  | Real-time operational properties of the system.                       |
+| report.properties.BatVolt          | Current battery voltage.                                              |
+| report.properties.Fanmode          | Fan control mode (0=auto?, 1=manual?).                                |
+| report.properties.Fanspeed         | Current fan speed setting.                                            |
+| report.properties.IOTState         | IoT connectivity state (2=WiFi+Cloud connected).                      |
+| report.properties.LCNState         | Local control network state.                                          |
+| report.properties.OTAState         | Over-the-air update status.                                           |
+| report.properties.VoltWakeup       | Voltage threshold for system wake-up.                                 |
+| report.properties.acMode           | AC mode (2=on-grid).                                                  |
+| report.properties.acStatus         | AC output status (0=off, 1=on).                                       |
+| report.properties.aiState          | AI feature status (0=off, 1=on).                                      |
+| report.properties.bindstate        | Binding status with app/cloud.                                        |
+| report.properties.chargeMaxLimit   | Max charge power limit (watts).                                       |
+| report.properties.dataReady        | Flag indicating new data is available.                                |
+| report.properties.dcStatus         | DC output/input state.                                                |
+| report.properties.electricLevel    | Battery level (%).                                                    |
+| report.properties.factoryModeState | Factory/test mode active (0=no, 1=yes).                               |
+| report.properties.gridInputPower   | Grid power being drawn (watts).                                       |
+| report.properties.gridOffMode      | Off-grid operation mode (0=off, 1=on).                                |
+| report.properties.gridOffPower     | Power in off-grid mode (watts).                                       |
+| report.properties.gridReverse      | Grid reverse mode.                                                    |
+| report.properties.gridStandard     | Regional grid standard.                                               |
+| report.properties.gridState        | Grid connection status (0=not connected, 1=connected).                |
+| report.properties.heatState        | Heating system active (0=off, 1=on).                                  |
+| report.properties.hyperTmp         | HUB temperature sensor; Celsius = (value / 10) - 273.15               |
+| report.properties.inputLimit       | Max allowed input power (watts), typically dynamic.                   |
+| report.properties.inverseMaxPower  | Inverter max output power (watts), typically 800.                     |
+| report.properties.lampSwitch       | LED indicator state (0=off, 1=on).                                    |
+| report.properties.minSoc           | Lower SoC target (unit tenths of %), typically 100=10%.               |
+| report.properties.oldMode          | Legacy mode active (if any).                                          |
+| report.properties.outputHomePower  | Power currently supplied (watts), i.e., battery power delivery.       |
+| report.properties.outputLimit      | Max power allowed to output (watts), typically dynamic.               |
+| report.properties.outputPackPower  | Power being discharged from pack.                                     |
+| report.properties.packInputPower   | Power charging into the battery pack.                                 |
+| report.properties.packState        | Operational state of battery pack (0=idle, 1=charging, 2=discharing). |
+| report.properties.pass             | Bypass mode (0=automatic, 1=always off, 2=always on).                 |
+| report.properties.pvStatus         | Photovoltaic input status (0=off, 1=on).                              |
+| report.properties.remainOutTime    | Time remaining with current SoC.                                      |
+| report.properties.reverseState     | Grid feed-in state.                                                   |
+| report.properties.rssi             | WiFi signal strength (in dBm).                                        |
+| report.properties.smartMode        | Smart mode active (0/1).                                              |
+| report.properties.socSet           | Target state of charge (e.g., 1000 = 100%).                           |
+| report.properties.socStatus        | Current SoC control state.                                            |
+| report.properties.solarInputPower  | Total solar input power.                                              |
+| report.properties.solarPower1–4    | Power from individual solar channels.                                 |
+| report.properties.ts               | Timestamp of this property snapshot (epoch).                          |
+| report.properties.tsZone           | Time zone (an ID?; Europe/Berlin is '14').                            |
+| report.properties.writeRsp         | Response code for last write/config command.                          |
+
+
+## Home Assistant
+
+`configuration.yml`:
+
+```yaml
+mqtt:
+  # https://www.home-assistant.io/integrations/sensor.mqtt/
+  # https://www.home-assistant.io/integrations/sensor#device-class
+  # https://developers.home-assistant.io/docs/core/entity/sensor/#available-state-classes
+  - sensor:
+    - name: "SolarFlow 800 Pro OutputPower"
+      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      value_template: "{{ value_json.properties.outputHomePower }}"
+      unique_id: "solarflow800pro1-outputpower"
+      # device_class must be energy for electricity grid, solar, or battery categories.
+      # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
+      device_class: "energy"
+      unit_of_measurement: "Wh"
+      state_class: "total"
+      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      json_attributes_template: "{{ value_json.properties | tojson }}"
+    - name: "SolarFlow 800 Pro ChargePower"
+      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      value_template: "{{ value_json.properties.outputPackPower }}"
+      unique_id: "solarflow800pro1-chargepower"
+      # device_class must be energy for electricity grid, solar, or battery categories.
+      # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
+      device_class: "energy"
+      unit_of_measurement: "Wh"
+      state_class: "total"
+      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      json_attributes_template: "{{ value_json.properties | tojson }}"
+    - name: "SolarFlow 800 Pro ElectricLevel"
+      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      value_template: "{{ value_json.properties.electricLevel }}"
+      unique_id: "solarflow800pro1-electriclevel"
+      device_class: "battery"
+      unit_of_measurement: "%"
+      state_class: "total"
+      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      json_attributes_template: "{{ value_json.properties | tojson }}"
+    - name: "SolarFlow 800 Pro Hub Temperature"
+      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      value_template: "{{ (value_json.properties.hyperTmp / 10) - 273.15 | round(1) }}"
+      unique_id: "solarflow800pro1-hypertmp"
+      device_class: "temperature"
+      unit_of_measurement: "°C"
+      state_class: "measurement"
+      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      json_attributes_template: "{{ value_json.properties | tojson }}"
+    - name: "SolarFlow 800 Pro Battery1 Temperature"
+      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      value_template: "{{ (value_json.packData[0].maxTemp / 10) - 273.15 | round(1) }}"
+      unique_id: "solarflow800pro1-packdata0-maxtemp"
+      device_class: "temperature"
+      unit_of_measurement: "°C"
+      state_class: "measurement"
+      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      json_attributes_template: "{{ value_json.packData[0] | tojson }}"
+```
