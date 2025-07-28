@@ -58,9 +58,9 @@ import dotenv
 
 
 __appname__ = "SF800Pro2MQTT"
-__version__ = "1.0.0"
+__version__ = "1.3.1"
 __date__ = "2025-07-01"
-__updated__ = "2025-07-10"
+__updated__ = "2025-07-19"
 __author__ = "Ixtalo"
 __email__ = "ixtalo@gmail.com"
 __license__ = "AGPL-3.0+"
@@ -88,7 +88,7 @@ FILTER_IP = os.getenv("FILTER_IP")
 DEBUG = bool(os.getenv("DEBUG", "").lower() in ("1", "true", "yes"))
 _last_pub_per_topic = defaultdict(lambda: 0.0)  # Last publish time per topic
 mqtt_cli: mqtt.Client = None  # Global MQTT client instance
-topics_blacklist = set()
+topics_blacklist: set = set()
 
 
 def setup_logging(log_file: str | None = None, level: int = logging.INFO, no_color=False):
@@ -155,10 +155,10 @@ def handle_mqtt_pkt(mqtt_pkt: Packet) -> tuple[str, str] | tuple[str, None] | tu
         logging.warning("Empty JSON payload for topic '%s'", topic)
         return topic, None
 
-    # Check if a payload with properties contains only one property
-    if "properties" in payload_json and len(payload_json["properties"]) == 1 \
+    # Check if a payload with properties contains less than one property
+    if "properties" in payload_json and len(payload_json["properties"]) <= 1 \
             and "packNum" in payload_json["properties"]:
-        logging.info("Ignoring (irrelevant) message with just single 'packNum' property.")
+        logging.info("Ignoring (irrelevant) message with less than 1 property in 'packNum', topic '%s'", topic)
         return topic, None
 
     # Compact JSON serialization without whitespace
@@ -169,22 +169,24 @@ def handle_mqtt_pkt(mqtt_pkt: Packet) -> tuple[str, str] | tuple[str, None] | tu
 
 def pkt_cb(pkt):
     """Handle callback function for each packet captured by scapy."""
-    global topics_blacklist     # pylint: disable=global-statement
-
     # filter all not TCP
     # if not pkt.haslayer(TCP):
     #    return
+    
+    mqtt_layer = None
 
     # Check if packet is of type MQTT PUBLISH
     # https://github.com/secdev/scapy/blob/7fb32a173f8567a498e25282da79569b5bf802bb/scapy/contrib/mqtt.py#L71
-    mqtt_layer = pkt.getlayer(MQTT)
+    try:
+        mqtt_layer = pkt.getlayer(MQTT)
+    except Exception as ex:
+        logging.exception(ex)
+        return
+        
     if mqtt_layer and mqtt_layer.type == 3:  # type: ignore # 3=PUBLISH
         # Parse and check
         topic, payload = handle_mqtt_pkt(mqtt_layer)
         if topic and payload:
-            # make sure it's an array
-            if isinstance(topics_blacklist, str):
-                topics_blacklist = [topics_blacklist]
             if topic in topics_blacklist:
                 logging.info("Topic '%s' is blacklisted - skipping!", topic)
             else:
@@ -196,7 +198,10 @@ def pkt_cb(pkt):
                 # Publish to MQTT broker
                 safe_publish(topic_new, payload)
     else:
-        logging.debug("Ignoring non MQTT-PUBLISH packet: %s", pkt.summary())
+        try:
+            logging.debug("Ignoring non MQTT-PUBLISH packet: %s", pkt.summary())
+        except UnicodeDecodeError as ex:    # Unicode decoding failsafe
+            logging.exception("Ignoring non MQTT-PUBLISH packet (not decodeable): %s", repr(pkt), exc_info=ex)
 
 
 def json_dumps_compact(payload):
@@ -217,7 +222,6 @@ def on_disconnect(client, _userdata, _flags, rc, _properties):
     while True:
         try:
             client.reconnect()
-            logging.info("MQTT reconnected")
             return
         except Exception as e:  # pylint: disable=broad-except
             logging.error("Reconnect failed: %s", e)
@@ -229,10 +233,10 @@ def safe_publish(topic, payload):
     now = time.time()
     last_pub_secs = now - _last_pub_per_topic[topic]
     if last_pub_secs < PUBLISH_PERIOD_SECONDS:
-        logging.debug("Skipping publishing for topic '%s' (last published %.1f seconds ago)", topic, last_pub_secs)
+        logging.debug("Skipping publishing topic '%s' (last published %.1f seconds ago)", topic, last_pub_secs)
     else:
         _last_pub_per_topic[topic] = now
-        logging.info("Publishing for topic '%s' ...", topic)
+        logging.info("Publishing topic '%s' ...", topic)
         try:
             mqtt_cli.publish(topic, payload, qos=0, retain=False)
         except Exception as e:  # pylint: disable=broad-except
@@ -260,6 +264,9 @@ def run():
 
     # Topics to exclude from publishing
     topics_blacklist = set(os.getenv("TOPICS_BLACKLIST", "").split(","))
+    # make sure it's an array
+    if isinstance(topics_blacklist, str):
+        topics_blacklist = set([topics_blacklist])
 
     # Establish MQTT connection
     mqtt_cli = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -273,10 +280,10 @@ def run():
     # Build a BPF filter to capture only MQTT PUBLISH messages
     bpf = (
         # Limit to IP and MQTT port
-        f"(tcp port 1883) and src host {FILTER_IP} "
+        f"(tcp port 1883) and (src host {FILTER_IP} or dst host {FILTER_IP})"
         # Limit to MQTT PUBLISH packets
         # PUBLISH = MsgType 3 --> upper Nibble 0x30–0x3F (first byte is 0x3x)
-        "and ((tcp[((tcp[12] & 0xf0) >> 2)] & 0xf0) == 0x30)"
+        " and ((tcp[((tcp[12] & 0xf0) >> 2)] & 0xf0) == 0x30)"
     )
     logging.info("Sniffing on %s, filter: '%s' ...", IFACE, bpf)
     try:

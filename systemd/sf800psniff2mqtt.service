@@ -6,13 +6,24 @@ ConditionPathExists=/sys/class/net/wlan0
 
 [Service]
 Type=simple
-User=nobody
+User=nobody  # better/safer: use a dedicated system user!
 WorkingDirectory=/opt/SF800Pro2MQTT
 ExecStart=/opt/SF800Pro2MQTT/.venv/bin/python sf800psniff2mqtt.py
-# ---- capabilities ----
-CapabilityBoundingSet=CAP_NET_RAW          # limit to this single cap
-AmbientCapabilities=CAP_NET_RAW            # pass it to the process
-NoNewPrivileges=yes                        # block later priv-escalation
+Restart=always
+#
+# https://www.man7.org/linux/man-pages/man7/capabilities.7.html
+#
+# CapabilityBoundingSet restricts the capabilities of the service to 
+# the specified set. In this case, CAP_NET_RAW allows the service to 
+# send and receive raw packets. It limits capabilities the process is 
+# allowed to obtain.
+CapabilityBoundingSet=CAP_NET_RAW
+# AmbientCapabilities (since 229): specifies additional capabilities 
+# that are inherited by the service's processes. It grants capabilities 
+# that the process normally wouldn't have started with.
+AmbientCapabilities=CAP_NET_RAW
+# NoNewPrivileges (since 187): prevent processes from gaining new privileges.
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

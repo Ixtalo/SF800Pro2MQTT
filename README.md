@@ -142,7 +142,7 @@ For permanent installation have a look at `systemd/`.
 | report.properties.packInputPower   | Power charging into the battery pack.                                 |
 | report.properties.packState        | Operational state of battery pack (0=idle, 1=charging, 2=discharing). |
 | report.properties.pass             | Bypass mode (0=automatic, 1=always off, 2=always on).                 |
-| report.properties.pvStatus         | Photovoltaic input status (0=off, 1=on).                              |
+| report.properties.pvStatus         | Photovoltaic input status (0=on, 1=off).                              |
 | report.properties.remainOutTime    | Time remaining with current SoC.                                      |
 | report.properties.reverseState     | Grid feed-in state.                                                   |
 | report.properties.rssi             | WiFi signal strength (in dBm).                                        |
