@@ -89,11 +89,24 @@ For permanent installation have a look at `systemd/`.
 
 | **Field Name**                     | **Field Description (presumably)**                                   |
 |------------------------------------|-----------------------------------------------------------------------|
+| energy                             | |
+| energy.deviceId                    | Unique ID of the solar battery device.                                |
+| energy.messageId                   | Sequential message identifier.                                        |
+| energy.product                     | Device model name.                                                    |
+| energy.timestamp                   | Epoch timestamp when data was recorded.                               |
+| energy.version                     | Message format version (in 07/2025 it is '2').                         |
+| energy.properties.gridOffPower     | Power in off-grid mode (watts).                                       |
+| energy.properties.chargePower      | ... |
+| energy.properties.outputPower      | ... |
+| energy.properties.mode             | ... |
+| energy.properties.chargeMode       | ... |
+| energy.properties.LCNState         | Local control network state.                                          |
+| report                             | |
 | report.deviceId                    | Unique ID of the solar battery device.                                |
 | report.messageId                   | Sequential message identifier.                                        |
 | report.product                     | Device model name.                                                    |
 | report.timestamp                   | Epoch timestamp when data was recorded.                               |
-| report.version                     | Message format versio (in 07/2025 it is '2').                         |
+| report.version                     | Message format version (in 07/2025 it is '2').                         |
 | report.packData[]                  | List of battery pack metrics (can contain multiple entries).          |
 | report.packData[].batcur           | Battery current (unit likely deci-amps, raw value may need scaling).  |
 | report.packData[].maxTemp          | Battery pack temperature; Celsius = (value / 10) - 273.15             |
@@ -138,8 +151,8 @@ For permanent installation have a look at `systemd/`.
 | report.properties.oldMode          | Legacy mode active (if any).                                          |
 | report.properties.outputHomePower  | Power currently supplied (watts), i.e., battery power delivery.       |
 | report.properties.outputLimit      | Max power allowed to output (watts), typically dynamic.               |
-| report.properties.outputPackPower  | Power being discharged from pack.                                     |
-| report.properties.packInputPower   | Power charging into the battery pack.                                 |
+| report.properties.outputPackPower  | Power charging into the battery pack.                                 |
+| report.properties.packInputPower   | Power being discharged from pack.                                     |
 | report.properties.packState        | Operational state of battery pack (0=idle, 1=charging, 2=discharing). |
 | report.properties.pass             | Bypass mode (0=automatic, 1=always off, 2=always on).                 |
 | report.properties.pvStatus         | Photovoltaic input status (0=on, 1=off).                              |
@@ -166,53 +179,74 @@ mqtt:
   # https://www.home-assistant.io/integrations/sensor#device-class
   # https://developers.home-assistant.io/docs/core/entity/sensor/#available-state-classes
   - sensor:
-    - name: "SolarFlow 800 Pro OutputPower"
-      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+   - name: "SolarFlow 800 Pro OutputHomePower"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
       value_template: "{{ value_json.properties.outputHomePower }}"
-      unique_id: "solarflow800pro1-outputpower"
-      # device_class must be energy for electricity grid, solar, or battery categories.
+      unique_id: "solarflow800pro1-outputHomePower"
+      # energy dashboard: device_class must be energy, state_class must be total / total_increasing
       # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
-      device_class: "energy"
-      unit_of_measurement: "Wh"
-      state_class: "total"
-      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
-      json_attributes_template: "{{ value_json.properties | tojson }}"
-    - name: "SolarFlow 800 Pro ChargePower"
-      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      device_class: "energy"     # must be "energy" to work with energy dashboard!
+      unit_of_measurement: "Wh"  # device-class "energy" => "Wh"!
+      state_class: "total"       # must be "total" to work with energy dashboard
+    - name: "SolarFlow 800 Pro GridInputPower"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
+      value_template: "{{ value_json.properties.gridInputPower }}"
+      unique_id: "solarflow800pro1-gridinputpower"
+      # energy dashboard: device_class must be energy, state_class must be total / total_increasing
+      # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
+      device_class: "energy"     # must be "energy" to work with energy dashboard!
+      unit_of_measurement: "Wh"  # device-class "energy" => "Wh"!
+      state_class: "total"       # must be "total" to work with energy dashboard
+    - name: "SolarFlow 800 Pro PV Input"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
+      value_template: "{{ value_json.properties.solarInputPower }}"
+      unique_id: "solarflow800pro1-pvinput"
+      # energy dashboard: device_class must be energy, state_class must be total / total_increasing
+      # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
+      device_class: "energy"     # must be "energy" to work with energy dashboard!
+      unit_of_measurement: "Wh"  # device-class "energy" => "Wh"!
+      state_class: "total"       # must be "total" to work with energy dashboard
+    # duplicate solarInputPower but with different device_class & unit & state_class
+    - name: "SolarFlow 800 Pro PV Input Watt"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
+      value_template: "{{ value_json.properties.solarInputPower }}"
+      unique_id: "solarflow800pro1-pvinput-watt"
+      device_class: "power"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+    - name: "SolarFlow 800 Pro OutputPackPower"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
       value_template: "{{ value_json.properties.outputPackPower }}"
-      unique_id: "solarflow800pro1-chargepower"
-      # device_class must be energy for electricity grid, solar, or battery categories.
-      # https://www.home-assistant.io/docs/energy/faq/#troubleshooting-missing-entities
-      device_class: "energy"
-      unit_of_measurement: "Wh"
-      state_class: "total"
-      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
-      json_attributes_template: "{{ value_json.properties | tojson }}"
+      unique_id: "solarflow800pro1-outputpackpower"
+      device_class: "energy"     # must be "energy" to work with energy dashboard!
+      unit_of_measurement: "Wh"  # device-class "energy" => "Wh"!
+      state_class: "total"       # must be "total" to work with energy dashboard
+    - name: "SolarFlow 800 Pro PackInputPower"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
+      value_template: "{{ value_json.properties.packInputPower }}"
+      unique_id: "solarflow800pro1-packinputpower"
+      device_class: "energy"     # must be "energy" to work with energy dashboard!
+      unit_of_measurement: "Wh"  # device-class "energy" => "Wh"!
+      state_class: "total"       # must be "total" to work with energy dashboard
     - name: "SolarFlow 800 Pro ElectricLevel"
-      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
       value_template: "{{ value_json.properties.electricLevel }}"
       unique_id: "solarflow800pro1-electriclevel"
       device_class: "battery"
       unit_of_measurement: "%"
-      state_class: "total"
-      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
-      json_attributes_template: "{{ value_json.properties | tojson }}"
+      state_class: "measurement"
     - name: "SolarFlow 800 Pro Hub Temperature"
-      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
       value_template: "{{ (value_json.properties.hyperTmp / 10) - 273.15 | round(1) }}"
       unique_id: "solarflow800pro1-hypertmp"
       device_class: "temperature"
       unit_of_measurement: "°C"
       state_class: "measurement"
-      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
-      json_attributes_template: "{{ value_json.properties | tojson }}"
     - name: "SolarFlow 800 Pro Battery1 Temperature"
-      state_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
+      state_topic: "tele/R3mn8U/deviceId/properties/report"
       value_template: "{{ (value_json.packData[0].maxTemp / 10) - 273.15 | round(1) }}"
       unique_id: "solarflow800pro1-packdata0-maxtemp"
       device_class: "temperature"
       unit_of_measurement: "°C"
       state_class: "measurement"
-      json_attributes_topic: "tele/R3mn8U/xxxxxxxx/properties/report"
-      json_attributes_template: "{{ value_json.packData[0] | tojson }}"
 ```

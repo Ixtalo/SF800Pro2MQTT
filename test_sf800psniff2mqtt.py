@@ -4,6 +4,7 @@ pytest unit tests
 """
 import json
 import os
+from io import StringIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,7 +12,7 @@ from scapy.all import IP, TCP   # noqa: F401, pylint: disable=no-name-in-module
 from scapy.contrib.mqtt import MQTT, MQTTPublish
 
 import sf800psniff2mqtt as sm
-from sf800psniff2mqtt import json_dumps_compact, handle_mqtt_pkt
+from sf800psniff2mqtt import json_dumps_compact, handle_mqtt_pkt, has_cap_net_raw
 
 
 # pylint: disable=missing-function-docstring, missing-module-docstring, unused-argument
@@ -98,16 +99,16 @@ class TestPktCallback:
         exp_payload = {"messageId": 123, "value": 42}
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
         sm.pkt_cb(pkt)
 
         # expect: published with topic and payload
-        assert published == [('tele/foo/bar', json_dumps_compact(exp_payload))]
+        assert published == [('/foo/bar', json_dumps_compact(exp_payload))]
 
     @staticmethod
     def test_pkt_cb_ignores_other_packets(monkeypatch):
@@ -115,7 +116,7 @@ class TestPktCallback:
         pkt = IP() / TCP()
 
         spy = MagicMock()
-        monkeypatch.setattr(sm, "safe_publish", spy)
+        monkeypatch.setattr(sm, "publish", spy)
 
         # action
         sm.pkt_cb(pkt)
@@ -128,9 +129,9 @@ class TestPktCallback:
         exp_topic = "/foo/bar"
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value='{}')
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -144,9 +145,9 @@ class TestPktCallback:
         exp_topic = "/foo/bar"
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value='{invalid}')
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -161,9 +162,9 @@ class TestPktCallback:
         exp_payload = {"properties": {"packNum": 42}}
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -179,11 +180,11 @@ class TestPktCallback:
         exp_payload = {"properties": {"foo": 42}}
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        monkeypatch.setattr(sm, "topics_blacklist", ['/foo/bar'])
+        monkeypatch.setattr(sm, "_topics_blacklist", ['/foo/bar'])
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -198,11 +199,11 @@ class TestPktCallback:
         exp_payload = {"properties": {"foo": 42}}
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        monkeypatch.setattr(sm, "topics_blacklist", '/foo/bar')     # a simple string, not an array
+        monkeypatch.setattr(sm, "_topics_blacklist", '/foo/bar')     # a simple string, not an array
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -217,11 +218,11 @@ class TestPktCallback:
         exp_payload = {"properties": {"foo": 42}}
         pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        monkeypatch.setattr(sm, "MQTT_TOPIC_PREFIX", "prefix/")
+        monkeypatch.setattr(sm, "_mqtt_topic_prefix", "prefix")
 
-        # safe_publish mock
+        # publish mock
         published = []
-        monkeypatch.setattr(sm, "safe_publish",
+        monkeypatch.setattr(sm, "publish",
                             lambda t, p: published.append((t, p)))
 
         # call
@@ -295,3 +296,36 @@ class TestHandleMqttPkt:
         # check
         assert not topic
         assert not payload
+
+
+class TestCheckCapNetRaw:
+    @staticmethod
+    def test_no_file(monkeypatch):
+        """Test that has_cap_net_raw returns False if /proc/self/status is not found."""
+        def open_fail(*args, **kwargs):
+            raise FileNotFoundError
+        monkeypatch.setattr("builtins.open", open_fail)
+        assert has_cap_net_raw() is False
+
+    @staticmethod
+    def test_cap_net_raw_set(monkeypatch):
+        """Test that has_cap_net_raw returns True when CAP_NET_RAW bit is set in CapEff."""
+        # CAP_NET_RAW = 1 << 13 = 8192 → hex 0x2000
+        fake_file = StringIO("Name:\tsome_process\nCapEff:\t2000\nState:\tR (running)\n")
+        monkeypatch.setattr("builtins.open", lambda *args, **kwargs: fake_file)
+        assert has_cap_net_raw() is True
+
+    @staticmethod
+    def test_cap_net_raw_unset(monkeypatch):
+        """Test that has_cap_net_raw returns False when CAP_NET_RAW bit is not set in CapEff."""
+        # Example hex value without bit 13 set, e.g. 0x1000
+        fake_file = StringIO("Name:\tsome_process\nCapEff:\t1000\nState:\tR (running)\n")
+        monkeypatch.setattr("builtins.open", lambda *args, **kwargs: fake_file)
+        assert has_cap_net_raw() is False
+
+    @staticmethod
+    def test_no_capeff_line(monkeypatch):
+        """Test that has_cap_net_raw returns False if CapEff line is missing."""
+        fake_file = StringIO("Name:\tsome_process\nState:\tR (running)\n")
+        monkeypatch.setattr("builtins.open", lambda *args, **kwargs: fake_file)
+        assert has_cap_net_raw() is False
