@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "sniff2mqtt"
-version = "0.1.0"
+name = "sf800p2mqtt"
+version = "1.8.0"
 description = "Sniffer for SolarFlow 800 Pro and MQTT publishing."
 authors = ["Ixtalo <ixtalo@users.noreply.github.com>"]
 license = "AGPL"
