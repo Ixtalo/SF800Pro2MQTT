@@ -11,6 +11,10 @@ import pytest
 
 from sf800p2mqtt.config import Config
 
+
+# pylint: disable=redefined-outer-name,unused-argument
+
+
 # Constants for test environment variables
 ENV_VARS = [
     "FILTER_IP", "MQTT_HOST", "MQTT_PORT", "MQTT_USER", "MQTT_PASS",

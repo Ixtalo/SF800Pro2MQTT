@@ -7,7 +7,7 @@ to stdout with timestamps for logging and debugging purposes.
 import logging
 from time import strftime
 
-from sf800p2mqtt.handlers.base import OutputHandler
+from ..base import OutputHandler
 
 
 class StdoutOutputHandler(OutputHandler):

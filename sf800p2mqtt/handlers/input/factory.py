@@ -5,12 +5,13 @@ This module provides a factory class for creating appropriate input handler
 instances based on the input type and source parameters. Supports creation
 of handlers for PCAP files and live network interfaces.
 """
+# pylint: disable=too-few-public-methods
 from pathlib import Path
 
 from sf800p2mqtt.constants import InputType
-from sf800p2mqtt.handlers.base import InputHandler
-from sf800p2mqtt.handlers.input.live import LiveInputHandler
-from sf800p2mqtt.handlers.input.pcap_file import PcapInputHandler
+from ..base import InputHandler
+from .live import LiveInputHandler
+from .pcap_file import PcapInputHandler
 
 
 class InputHandlerFactory:

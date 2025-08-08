@@ -8,9 +8,21 @@ readability in terminal environments.
 """
 
 import logging
+import os
 import sys
 
 import colorlog
+
+
+def should_use_colors() -> bool:
+    """Determine if colored output should be used."""
+    # no colors if started via systemd
+    if os.environ.get('JOURNAL_STREAM') or os.environ.get('INVOCATION_ID'):
+        return False
+    # no colors if is no TTY
+    if not sys.stdout.isatty():
+        return False
+    return True
 
 
 def setup_logging(log_file: str | None = None, level: int = logging.INFO, no_color=False):
@@ -38,6 +50,8 @@ def setup_logging(log_file: str | None = None, level: int = logging.INFO, no_col
         UTF-8 encoding. Color formatting is automatically disabled for file
         output to prevent ANSI escape codes in log files.
     """
+    if not no_color:
+        no_color = not should_use_colors()
     if log_file:
         # pylint: disable=consider-using-with
         stream = open(log_file, "a", encoding="utf8")

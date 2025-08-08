@@ -9,7 +9,7 @@ from time import sleep
 
 import paho.mqtt.client as mqtt
 
-from sf800p2mqtt.handlers.base import OutputHandler
+from ..base import OutputHandler
 
 
 class MqttOutputHandler(OutputHandler):

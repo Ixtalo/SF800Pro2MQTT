@@ -7,7 +7,7 @@ from io import StringIO
 
 from sf800p2mqtt.sf800psniff2mqtt import has_cap_net_raw
 
-# pylint: disable=missing-function-docstring, missing-module-docstring, unused-argument
+# pylint: disable=missing-function-docstring, missing-module-docstring, unused-argument,missing-class-docstring
 
 
 # Run tests with logging DEBUG

@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
+"""
+Unit tests for PCAP live input handler.
+"""
 import logging
 from unittest.mock import Mock
 
 import sf800p2mqtt.handlers.input.live
 from sf800p2mqtt.handlers import LiveInputHandler
+
+# pylint: disable=missing-module-docstring
 
 
 class TestLiveInputHandler:

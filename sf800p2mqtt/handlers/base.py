@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Callable
 
 
-class InputHandler(ABC):
+class InputHandler(ABC):    # pylint: disable=too-few-public-methods
     """Abstract base class for input handlers.
 
     Defines the interface that all input handlers must implement for

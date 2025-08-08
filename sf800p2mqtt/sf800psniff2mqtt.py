@@ -72,9 +72,9 @@ from .packet_processor import PacketProcessor
 from .utils.logging import setup_logging
 
 __appname__ = "SF800Pro2MQTT"
-__version__ = "1.8.0"
+__version__ = "1.8.7"
 __date__ = "2025-07-01"
-__updated__ = "2025-08-01"
+__updated__ = "2025-08-08"
 __author__ = "Ixtalo"
 __email__ = "ixtalo@gmail.com"
 __license__ = "AGPL-3.0+"
@@ -133,7 +133,7 @@ def run(config: Config,
         output_handler.disconnect()
 
 
-def main():
+def main():     # pylint: disable=too-many-locals
     """Run main program entry.
 
     Returns:
@@ -156,7 +156,10 @@ def main():
     logging_level = logging.DEBUG if debug else \
         (logging.INFO if arg_verbose else logging.WARNING)
     setup_logging(arg_logfile, logging_level, arg_nocolor)
+    # temporarily override level to output INFO level
+    logging.getLogger().setLevel(logging.INFO)
     logging.info(version_string)
+    logging.getLogger().setLevel(logging_level)
 
     # Determine input
     input_type = None
@@ -168,9 +171,8 @@ def main():
     elif arg_interface:
         input_type = InputType.INTERFACE
         source = arg_interface
-        # Check if the script is run with root privileges or has CAP_NET_RAW capability
-        # (only needed for live capture)
-        if os.geteuid() != 0 or not has_cap_net_raw():
+        # Check if the script has the right permissions for live capture
+        if os.geteuid() != 0 and not has_cap_net_raw():
             logging.warning("This script requires root privileges or CAP_NET_RAW capability for live capture.")
     else:
         raise RuntimeError("unexpected input state")

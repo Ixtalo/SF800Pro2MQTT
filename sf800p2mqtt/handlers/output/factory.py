@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Factory module for creating output handler instances."""
 from sf800p2mqtt.constants import OutputType
-from sf800p2mqtt.handlers.base import OutputHandler
-from sf800p2mqtt.handlers.output.mqtt import MqttOutputHandler
-from sf800p2mqtt.handlers.output.stdout import StdoutOutputHandler
+from ..base import OutputHandler
+from .mqtt import MqttOutputHandler
+from .stdout import StdoutOutputHandler
 
 
-class OutputHandlerFactory:
+class OutputHandlerFactory:     # pylint: disable=too-few-public-methods
     """Factory for creating output handlers."""
 
     @staticmethod

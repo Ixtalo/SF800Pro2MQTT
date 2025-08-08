@@ -10,10 +10,10 @@ from typing import Callable
 
 from scapy.all import sniff
 
-from sf800p2mqtt.handlers.base import InputHandler
+from ..base import InputHandler
 
 
-class PcapInputHandler(InputHandler):
+class PcapInputHandler(InputHandler):   # pylint: disable=too-few-public-methods
     """PCAP file input handler.
 
     Handles reading network packet captures from PCAP files with support
@@ -58,6 +58,7 @@ class PcapInputHandler(InputHandler):
             sniff(offline=str(self.pcap_file), prn=packet_callback, filter=bpf_filter)
             logging.info("Finished reading PCAP file")
             return 0
+        # pylint: disable=broad-exception-caught
         except Exception as ex:
             logging.exception("Error reading PCAP file: %s", ex)
             return -1

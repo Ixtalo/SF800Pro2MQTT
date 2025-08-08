@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+"""
+Unit tests for PCAP file input handler.
+"""
 import logging
 from pathlib import Path
 from unittest.mock import Mock, call
@@ -7,6 +10,8 @@ import pytest
 
 import sf800p2mqtt.handlers.input.pcap_file
 from sf800p2mqtt.handlers import PcapInputHandler
+
+# pylint: disable=missing-module-docstring,redefined-outer-name
 
 
 @pytest.fixture

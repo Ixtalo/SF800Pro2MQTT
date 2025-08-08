@@ -48,24 +48,33 @@ class PacketProcessor:
         """Handle MQTT packet and extract topic and payload."""
         assert mqtt_pkt.type == 3, "Packet must be MQTT PUBLISH packet!"
 
-        topic = mqtt_pkt.topic
-        payload = mqtt_pkt.payload.value
-
-        if not topic:
-            logging.warning("No MQTT topic found in packet!")
+        # do not do "topic = mqtt_pkt.topic" because it could fail for faulty packets
+        topic = getattr(mqtt_pkt, "topic", None)
+        if topic is None:
+            logging.warning("MQTT packet without topic field: %s", mqtt_pkt.fields)
             return None, None
-
         if isinstance(topic, bytes):
-            topic = topic.decode("utf8")
+            try:
+                topic = topic.decode("utf8")
+            except UnicodeDecodeError as ex:
+                logging.exception(ex)
+                return None, None
 
-        if not payload:
-            logging.warning("Empty payload for topic '%s'", topic)
+        # do not do "payload = mqtt_pkt.payload.value" because it could fail for faulty packets
+        payload = getattr(mqtt_pkt, "payload", None)
+        if payload is None:
+            logging.warning("MQTT packet without payload field: %s", mqtt_pkt.fields)
             return topic, None
-
         try:
-            payload_json = json.loads(payload)
+            value = payload.value
+            if isinstance(value, bytes):
+                value = value.decode("utf-8")
+            payload_json = json.loads(value)
+        except UnicodeDecodeError as ex:
+            logging.warning("Payload decode failed for topic '%s': %s", topic, ex)
+            return topic, None
         except json.JSONDecodeError as ex:
-            logging.warning("Invalid JSON payload for topic '%s': %s", topic, ex)
+            logging.warning("Could not JSON decode payload for topic '%s': %s", topic, ex)
             return topic, None
 
         if not payload_json:
@@ -78,7 +87,7 @@ class PacketProcessor:
             and len(payload_json["properties"]) <= 1     # noqa: W503
             and "packNum" in payload_json["properties"]  # noqa: W503
         ):
-            logging.info("Ignoring irrelevant message for topic '%s'", topic)
+            logging.info("Ignoring message with only single packNum property for topic '%s'", topic)
             return topic, None
 
         # Compact JSON serialization

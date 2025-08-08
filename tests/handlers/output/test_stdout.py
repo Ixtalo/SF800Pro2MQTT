@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+"""
+Unit tests for STDOUT output handler.
+"""
 import logging
 from unittest.mock import Mock
 

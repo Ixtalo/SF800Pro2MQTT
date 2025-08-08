@@ -11,14 +11,17 @@ import json
 
 import pytest
 
-import sf800p2mqtt.handlers.input.factory
-import sf800p2mqtt.handlers.output.factory
 import sf800p2mqtt.sf800psniff2mqtt as sm
 from sf800p2mqtt.config import Config
+from sf800p2mqtt.handlers.input.factory import InputHandlerFactory
 from sf800p2mqtt.handlers.input.live import LiveInputHandler
 from sf800p2mqtt.handlers.input.pcap_file import PcapInputHandler
+from sf800p2mqtt.handlers.output.factory import OutputHandlerFactory
 from sf800p2mqtt.handlers.output.mqtt import MqttOutputHandler
 from sf800p2mqtt.handlers.output.stdout import StdoutOutputHandler
+
+
+# pylint: disable=too-few-public-methods,missing-function-docstring,redefined-outer-name
 
 
 @pytest.fixture
@@ -67,7 +70,7 @@ class DummyPacket:
     def __init__(self, mqtt_layer):
         self._mqtt_layer = mqtt_layer
 
-    def getlayer(self, layer):
+    def getlayer(self, _layer):
         # If the requested layer is MQTT, return our dummy MQTT layer.
         return self._mqtt_layer
 
@@ -153,7 +156,7 @@ def test_run_with_input_output_handlers(test_config):
     assert "properties" in payload_obj, "The published payload should contain 'properties'."
 
 
-def test_run_with_mqtt_topic_prefix(monkeypatch, test_config):
+def test_run_with_mqtt_topic_prefix(test_config):
     """
     Test that run() correctly applies MQTT topic prefix.
     """
@@ -187,7 +190,7 @@ def test_run_with_mqtt_topic_prefix(monkeypatch, test_config):
     )
 
 
-def test_run_with_blacklisted_topic(monkeypatch, test_config):
+def test_run_with_blacklisted_topic(test_config):
     """
     Test that run() correctly filters out blacklisted topics.
     """
@@ -219,11 +222,11 @@ def test_output_handler_connection_failure(test_config):
     """
     Test that run() handles output handler connection failure gracefully.
     """
-    # Create input handler
     input_handler = DummyInputHandler([])
 
-    # Create output handler that fails to connect
     class FailingOutputHandler(DummyOutputHandler):
+        """Dummy class which always fails to connect."""
+
         def connect(self) -> bool:
             return False
 
@@ -245,7 +248,7 @@ def test_input_handler_factory(tmp_path):
     Test InputHandlerFactory creates correct handler types.
     """
     # Test live input handler creation
-    live_handler = sf800p2mqtt.handlers.input.factory.InputHandlerFactory.create_handler(sm.InputType.INTERFACE, source="wlan0")
+    live_handler = InputHandlerFactory.create_handler(sm.InputType.INTERFACE, source="wlan0")
     assert isinstance(live_handler, LiveInputHandler)
     assert live_handler.interface == "wlan0"
 
@@ -253,7 +256,7 @@ def test_input_handler_factory(tmp_path):
     with tmp_file.open("+a") as fout:
         fout.write("dummy")
 
-    pcap_handler = sf800p2mqtt.handlers.input.factory.InputHandlerFactory.create_handler(sm.InputType.PCAP_FILE, source=str(tmp_file))
+    pcap_handler = InputHandlerFactory.create_handler(sm.InputType.PCAP_FILE, source=str(tmp_file))
     assert isinstance(pcap_handler, PcapInputHandler)
     assert pcap_handler.pcap_file == tmp_file
 
@@ -263,7 +266,7 @@ def test_output_handler_factory():
     Test OutputHandlerFactory creates correct handler types.
     """
     # Test MQTT output handler creation
-    mqtt_handler = sf800p2mqtt.handlers.output.factory.OutputHandlerFactory.create_handler(
+    mqtt_handler = OutputHandlerFactory.create_handler(
         sm.OutputType.MQTT,
         mqtt_host="localhost",
         mqtt_port=1883,
@@ -275,5 +278,5 @@ def test_output_handler_factory():
     assert mqtt_handler.port == 1883
 
     # Test STDOUT output handler creation
-    stdout_handler = sf800p2mqtt.handlers.output.factory.OutputHandlerFactory.create_handler(sm.OutputType.STDOUT)
+    stdout_handler = OutputHandlerFactory.create_handler(sm.OutputType.STDOUT)
     assert isinstance(stdout_handler, StdoutOutputHandler)

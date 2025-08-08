@@ -6,6 +6,8 @@ import paho.mqtt.client
 
 from sf800p2mqtt.handlers import MqttOutputHandler
 
+# pylint: disable=missing-module-docstring,redefined-outer-name
+
 
 class TestMqttOutputHandler:
     """Test cases for MqttOutputHandler class."""
@@ -151,7 +153,7 @@ class TestMqttOutputHandler:
         handler = MqttOutputHandler()
 
         with caplog.at_level(logging.INFO):
-            handler._on_connect(mock_client)
+            handler._on_connect(mock_client)       # pylint: disable=protected-access
 
         assert f"MQTT connected ({mock_client})" in caplog.text
 
@@ -168,7 +170,7 @@ class TestMqttOutputHandler:
         handler = MqttOutputHandler()
 
         with caplog.at_level(logging.WARNING):
-            handler._on_disconnect(mock_client, None, None, 1, None)
+            handler._on_disconnect(mock_client, None, None, 1, None)    # pylint: disable=protected-access
 
         assert "MQTT disconnected (rc=1) – retrying ..." in caplog.text
         mock_client.reconnect.assert_called_once()

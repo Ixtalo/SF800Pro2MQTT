@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-
+"""
+Unit test for Scapy Packet Callback.
+"""
 import json
 from unittest.mock import MagicMock
 
@@ -10,6 +12,9 @@ from scapy.contrib.mqtt import MQTT, MQTTPublish
 
 from sf800p2mqtt.config import Config
 from sf800p2mqtt.packet_processor import PacketProcessor
+
+
+# pylint: disable=missing-function-docstring,redefined-outer-name
 
 
 @pytest.fixture()

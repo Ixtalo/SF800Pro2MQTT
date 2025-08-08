@@ -14,7 +14,7 @@ import dotenv
 
 
 @dataclass
-class Config:
+class Config:       # pylint: disable=too-many-instance-attributes
     """Application configuration container.
 
     Holds all configuration parameters for the application including

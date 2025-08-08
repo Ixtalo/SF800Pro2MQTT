@@ -6,6 +6,8 @@ import sf800p2mqtt.handlers.input.live
 import sf800p2mqtt.handlers.input.pcap_file
 from sf800p2mqtt.handlers import LiveInputHandler, PcapInputHandler
 
+# pylint: disable=missing-module-docstring
+
 
 class TestIntegration:
     """Integration tests for input handlers."""
