@@ -6,19 +6,19 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-from scapy.all import (  # type: ignore # noqa: F401, pylint: disable=no-name-in-module
-    IP, TCP)
+from scapy.layers.inet import IP, TCP
+from scapy.layers.l2 import Ether
 from scapy.contrib.mqtt import MQTT, MQTTPublish
 
 from sf800p2mqtt.config import Config
-from sf800p2mqtt.packet_processor import PacketProcessor
+from sf800p2mqtt.packet_processor import PacketProcessor, InvalidMqttPacketError
 
 
 # pylint: disable=missing-function-docstring,redefined-outer-name
 
 
 @pytest.fixture()
-def processor():
+def processor(tmp_path):
     config = Config(
         filter_ip="192.168.1.100",
         mqtt_host="127.0.0.1",
@@ -27,10 +27,20 @@ def processor():
         mqtt_pass=None,
         mqtt_topic_prefix="",
         publish_period_seconds=30,
-        topics_blacklist=set()
+        topics_blacklist=set(),
+        output_dir=tmp_path
     )
     instance = PacketProcessor(config, None)
     return instance
+
+
+@pytest.fixture
+def mqtt_pkt_base():
+    # Create a properly layered packet
+    return Ether() / IP(src="127.0.0.1", dst="127.0.0.1") \
+        / TCP(sport=1883, dport=1883) \
+        / MQTT(type=3)
+    # after this, the actual MQTT type must be added (e.g., MQTTPublish)
 
 
 class TestHandleMqttPkt:
@@ -39,19 +49,19 @@ class TestHandleMqttPkt:
     @staticmethod
     def test_handle_mqtt_packet_emptyvalue(processor):
         # prepare
-        pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"")
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"")
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        with pytest.raises(InvalidMqttPacketError) as ex:
+            processor.handle_mqtt_packet(mqtt_pkt)
         # check
-        assert topic == "/foo/bar"
-        assert not payload
+        assert ex.value.error_type_name == "payload-json"
 
     @staticmethod
     def test_handle_mqtt_packet_emptyjson(processor):
         # prepare
-        pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"{}")
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"{}")
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        topic, payload = processor.handle_mqtt_packet(mqtt_pkt)
         # check
         assert topic == "/foo/bar"
         assert not payload
@@ -59,20 +69,20 @@ class TestHandleMqttPkt:
     @staticmethod
     def test_handle_mqtt_packet_invalidjson(processor):
         # prepare
-        pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"{invalidjson}")
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"{invalidjson}")
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        with pytest.raises(InvalidMqttPacketError) as ex:
+            processor.handle_mqtt_packet(mqtt_pkt)
         # check
-        assert topic == "/foo/bar"
-        assert not payload
+        assert ex.value.error_type_name == "payload-json"
 
     @staticmethod
     def test_handle_mqtt_packet_porpertiesonly1(processor):
         # prepare
         payload_inp = {"properties": {"onlyone": "field"}}
-        pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=json.dumps(payload_inp))
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=json.dumps(payload_inp))
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        topic, payload = processor.handle_mqtt_packet(mqtt_pkt)
         # check
         assert topic == '/foo/bar'
         assert payload == '{"properties":{"onlyone":"field"}}'
@@ -81,9 +91,9 @@ class TestHandleMqttPkt:
     def test_handle_mqtt_packet_porpertiesonly1packnum(processor):
         # prepare
         payload_inp = {"properties": {"packNum": 123}}
-        pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=json.dumps(payload_inp))
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=json.dumps(payload_inp))
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        topic, payload = processor.handle_mqtt_packet(mqtt_pkt)
         # check
         assert topic == "/foo/bar"
         assert not payload
@@ -93,20 +103,20 @@ class TestHandleMqttPkt:
         # prepare
         pkt = MQTT(type=3) / MQTTPublish()
         # action
-        topic, payload = processor.handle_mqtt_packet(pkt)
+        with pytest.raises(InvalidMqttPacketError) as ex:
+            processor.handle_mqtt_packet(pkt)
         # check
-        assert not topic
-        assert not payload
+        assert ex.value.error_type_name == "payload-json"
 
 
 class TestPackketCallback:
     """Test cases for pkt_cb function."""
 
     @staticmethod
-    def test_pkt_cb_publishes(monkeypatch, processor):
+    def test_pkt_cb_publishes(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
         exp_payload = {"messageId": 123, "value": 42}
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
         # publish mock
         published = []
@@ -134,9 +144,9 @@ class TestPackketCallback:
         spy.assert_not_called()
 
     @staticmethod
-    def test_pkt_cb_publishes_empty_payload(monkeypatch, processor):
+    def test_pkt_cb_publishes_empty_payload(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value='{}')
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value='{}')
 
         # publish mock
         published = []
@@ -150,9 +160,9 @@ class TestPackketCallback:
         assert not published
 
     @staticmethod
-    def test_pkt_cb_publishes_invalid_payload(monkeypatch, processor):
+    def test_pkt_cb_publishes_invalid_payload(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value='{invalid}')
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value='{invalid}')
 
         # publish mock
         published = []
@@ -166,10 +176,10 @@ class TestPackketCallback:
         assert not published
 
     @staticmethod
-    def test_pkt_cb_publishes_propertiesonlypacknum(monkeypatch, processor):
+    def test_pkt_cb_publishes_propertiesonlypacknum(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
         exp_payload = {"properties": {"packNum": 42}}
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
         # publish mock
         published = []
@@ -184,13 +194,13 @@ class TestPackketCallback:
         assert not published
 
     @staticmethod
-    def test_pkt_cb_publishes_topicblacklist(monkeypatch, processor):
+    def test_pkt_cb_publishes_topicblacklist(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
         exp_payload = {"properties": {"foo": 42}}
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
         # monkeypatch.setattr(processor, "_topics_blacklist", ['/foo/bar'])
-        processor.topics_blacklist = {'/foo/bar'}
+        processor.config.topics_blacklist = {'/foo/bar'}
 
         # publish mock
         published = []
@@ -204,12 +214,12 @@ class TestPackketCallback:
         assert not published
 
     @staticmethod
-    def test_pkt_cb_publishes_topicblacklist_string(monkeypatch, processor):
+    def test_pkt_cb_publishes_topicblacklist_string(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
         exp_payload = {"properties": {"foo": 42}}
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        processor.topics_blacklist = '/foo/bar'  # invalid type: a simple string, not an array
+        processor.config.topics_blacklist = '/foo/bar'  # invalid type: a simple string, not an array
 
         # publish mock
         published = []
@@ -223,12 +233,12 @@ class TestPackketCallback:
         assert not published
 
     @staticmethod
-    def test_pkt_cb_publishes_topicprefix(monkeypatch, processor):
+    def test_pkt_cb_publishes_topicprefix(monkeypatch, processor, mqtt_pkt_base):
         exp_topic = "/foo/bar"
         exp_payload = {"properties": {"foo": 42}}
-        pkt = MQTT(type=3) / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
+        pkt = mqtt_pkt_base / MQTTPublish(topic=exp_topic, value=json.dumps(exp_payload))
 
-        processor.mqtt_topic_prefix = "prefix"
+        processor.config.mqtt_topic_prefix = "prefix"
 
         # publish mock
         published = []

@@ -25,7 +25,7 @@ from sf800p2mqtt.handlers.output.stdout import StdoutOutputHandler
 
 
 @pytest.fixture
-def test_config():
+def test_config(tmp_path):
     """Provide a minimal Config object for testing."""
     return Config(
         filter_ip="192.168.3.100",
@@ -35,7 +35,8 @@ def test_config():
         mqtt_pass=None,
         mqtt_topic_prefix="",
         publish_period_seconds=30,
-        topics_blacklist=set()
+        topics_blacklist=set(),
+        output_dir=tmp_path
     )
 
 

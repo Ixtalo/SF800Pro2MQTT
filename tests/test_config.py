@@ -6,6 +6,7 @@ This module contains comprehensive unit tests for the Config dataclass,
 including initialization, environment variable handling, and CLI argument processing.
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock
 import pytest
 
@@ -33,7 +34,8 @@ def base_arguments():
         "--mqtt-pass": None,
         "--mqtt-prefix": None,
         "--publish-period": None,
-        "--topics-blacklist": None
+        "--topics-blacklist": None,
+        "--output-dir": None
     }
 
 
@@ -82,7 +84,8 @@ class TestConfigInitialization:
             mqtt_pass="testpass",
             mqtt_topic_prefix="test/prefix",
             publish_period_seconds=60,
-            topics_blacklist={"topic1", "topic2"}
+            topics_blacklist={"topic1", "topic2"},
+            output_dir=Path("/tmp/faulty_packets")
         )
 
         assert config.filter_ip == "192.168.1.100"
@@ -104,7 +107,8 @@ class TestConfigInitialization:
             mqtt_pass=None,
             mqtt_topic_prefix="",
             publish_period_seconds=30,
-            topics_blacklist=set()
+            topics_blacklist=set(),
+            output_dir=Path("/tmp/faulty_packets")
         )
 
         assert config.topics_blacklist == set()
@@ -120,7 +124,8 @@ class TestConfigInitialization:
             mqtt_pass=None,
             mqtt_topic_prefix="",
             publish_period_seconds=30,
-            topics_blacklist=existing_blacklist
+            topics_blacklist=existing_blacklist,
+            output_dir=Path("/tmp/faulty_packets")
         )
 
         assert config.topics_blacklist == existing_blacklist
@@ -140,7 +145,8 @@ class TestConfigFromArgsAndEnv:
             "--mqtt-pass": "pass123",
             "--mqtt-prefix": "sensor/data",
             "--publish-period": "45",
-            "--topics-blacklist": "topic1,topic2,topic3"
+            "--topics-blacklist": "topic1,topic2,topic3",
+            "--output-dir": "/tmp"
         }
 
         config = Config.from_args_and_env(arguments)

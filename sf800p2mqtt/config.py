@@ -8,6 +8,7 @@ CLI argument precedence over environment settings.
 """
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Set
 
 import dotenv
@@ -31,6 +32,7 @@ class Config:       # pylint: disable=too-many-instance-attributes
     mqtt_topic_prefix: str
     publish_period_seconds: int
     topics_blacklist: set
+    output_dir: Optional[Path]
 
     def __post_init__(self):
         """Initialize mutable default values."""
@@ -56,6 +58,11 @@ class Config:       # pylint: disable=too-many-instance-attributes
             """Parse comma-separated blacklist string."""
             return {v.strip() for v in value.split(",") if v.strip()}
 
+        # check output dir vailidity (exists and is dir-type)
+        output_dir = Path(get_config_value(arguments["--output-dir"], "OUTPUT_DIR"))
+        if output_dir:
+            assert output_dir.is_dir(), "OUTPUT_DIR must be an existing directory!"
+
         # Build configuration
         return cls(
             filter_ip=get_config_value(arguments["<filter-ip>"], "FILTER_IP"),
@@ -65,5 +72,6 @@ class Config:       # pylint: disable=too-many-instance-attributes
             mqtt_pass=get_config_value(arguments["--mqtt-pass"], "MQTT_PASS") or None,
             mqtt_topic_prefix=get_config_value(arguments["--mqtt-prefix"], "MQTT_TOPIC_PREFIX").rstrip("/"),
             publish_period_seconds=get_int_config_value(arguments["--publish-period"], "PUBLISH_PERIOD_SECONDS", 30),
-            topics_blacklist=parse_blacklist(get_config_value(arguments["--topics-blacklist"], "TOPICS_BLACKLIST"))
+            topics_blacklist=parse_blacklist(get_config_value(arguments["--topics-blacklist"], "TOPICS_BLACKLIST")),
+            output_dir=output_dir
         )

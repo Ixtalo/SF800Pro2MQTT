@@ -29,6 +29,7 @@ Options:
   --mqtt-user=USER        MQTT username.
   --mqtt-pass=PASS        MQTT password.
   --mqtt-prefix=PREFIX    MQTT topic prefix.
+  --output-dir=PATH       Output directory to store faulty packets.
   --publish-period=SEC    Publish period in seconds [default: 30].
   --topics-blacklist=LIST Comma-separated list of topics to exclude.
   -v --verbose            Be more verbose.
@@ -72,9 +73,9 @@ from .packet_processor import PacketProcessor
 from .utils.logging import setup_logging
 
 __appname__ = "SF800Pro2MQTT"
-__version__ = "1.8.7"
+__version__ = "1.10.4"
 __date__ = "2025-07-01"
-__updated__ = "2025-08-08"
+__updated__ = "2025-08-10"
 __author__ = "Ixtalo"
 __email__ = "ixtalo@gmail.com"
 __license__ = "AGPL-3.0+"
@@ -193,6 +194,10 @@ def main():     # pylint: disable=too-many-locals
     )
 
     logging.info("Input type %s, output type %s", input_type.value.upper(), output_type.value.upper())
+
+    if config.output_dir:
+        logging.info("Output directory: %s", config.output_dir.resolve())
+
     return run(
         config=config,
         input_handler=input_handler,
