@@ -3,6 +3,7 @@
 Unit test for Scapy Packet Callback.
 """
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -67,7 +68,7 @@ class TestHandleMqttPkt:
         assert not payload
 
     @staticmethod
-    def test_handle_mqtt_packet_invalidjson(processor):
+    def test_handle_mqtt_packet_invalidjson(processor, caplog):
         # prepare
         mqtt_pkt = MQTT(type=3) / MQTTPublish(topic="/foo/bar", value=b"{invalidjson}")
         # action
@@ -75,6 +76,9 @@ class TestHandleMqttPkt:
             processor.handle_mqtt_packet(mqtt_pkt)
         # check
         assert ex.value.error_type_name == "payload-json"
+        assert caplog.record_tuples == [
+            ('root', logging.WARNING, "Could not JSON decode payload for topic '/foo/bar': Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",)
+        ]
 
     @staticmethod
     def test_handle_mqtt_packet_porpertiesonly1(processor):
@@ -107,6 +111,19 @@ class TestHandleMqttPkt:
             processor.handle_mqtt_packet(pkt)
         # check
         assert ex.value.error_type_name == "payload-json"
+
+    @staticmethod
+    def test_handle_mqtt_packet_corruptedtopic(processor, caplog):
+        # prepare
+        corrupted_topic = '02,"deviceId":"xxxxxxx","version":2,"product":"solarFlow800Pro","properties":{"packNum":1},"packData":[{"sn":"xxxxxxxx"}]}'
+        mqtt_pkt = MQTT(type=3) / MQTTPublish(topic=corrupted_topic, value=b"{invalidjson}")
+        # action
+        with pytest.raises(InvalidMqttPacketError) as ex:
+            processor.handle_mqtt_packet(mqtt_pkt)
+        # check
+        assert ex.value.error_type_name == "payload-json"
+        # no messages should be logged on this logging level
+        assert caplog.record_tuples == []
 
 
 class TestPackketCallback:

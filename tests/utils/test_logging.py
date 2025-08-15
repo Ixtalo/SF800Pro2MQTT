@@ -1,197 +1,440 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Unit tests for logging configuration module."""
+"""Unit tests for the logging configuration module."""
 
 import logging
 import sys
-from io import StringIO
 from unittest.mock import mock_open, patch
 
+import pytest
 import colorlog
 
-import sf800p2mqtt.utils.logging
-from sf800p2mqtt.utils.logging import should_use_colors, setup_logging
+from sf800p2mqtt.utils.logging import (
+    setup_logging,
+    is_running_under_systemd,
+    is_stdout_tty,
+    INTERACTIVE_FORMAT,
+    SYSTEMD_FORMAT,
+    REDIRECTED_FORMAT
+)
+
+# pylint: disable=unused-argument,redefined-outer-name
+# pylint: disable=too-many-arguments,too-many-positional-arguments
+# pylint: disable=line-too-long
 
 
-class TestShouldUseColors:
-    """Test cases for should_use_colors function."""
+# ============================================================================
+# FIXTURES
+# ============================================================================
 
-    def test_returns_false_when_journal_stream_set(self, monkeypatch):
-        """Test that colors are disabled when JOURNAL_STREAM is set."""
+@pytest.fixture
+def clean_environment(monkeypatch):
+    """Clean environment fixture that removes systemd variables."""
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    return monkeypatch
+
+
+@pytest.fixture
+def reset_logging():
+    """Fixture to reset logging configuration before and after tests."""
+    # Store original state
+    root_logger = logging.getLogger()
+    original_handlers = root_logger.handlers[:]
+    original_level = root_logger.level
+
+    # Clear current handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    yield
+
+    # Reset to original state
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    for handler in original_handlers:
+        root_logger.addHandler(handler)
+
+    root_logger.setLevel(original_level)
+
+
+@pytest.fixture
+def mock_tty_true(monkeypatch):
+    """Mock stdout as TTY."""
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+
+@pytest.fixture
+def mock_tty_false(monkeypatch):
+    """Mock stdout as non-TTY."""
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+
+@pytest.fixture
+def systemd_environment(monkeypatch):
+    """Set up systemd environment variables."""
+    monkeypatch.setenv("JOURNAL_STREAM", "some_value")
+    return monkeypatch
+
+
+@pytest.fixture
+def interactive_environment(clean_environment, mock_tty_true):
+    """Set up interactive terminal environment."""
+    return clean_environment
+
+
+# ============================================================================
+# TESTS
+# ============================================================================
+
+class TestIsRunningUnderSystemd:
+    """Tests for is_running_under_systemd function."""
+
+    def test_journal_stream_present(self, monkeypatch):
+        """Test detection when JOURNAL_STREAM is set."""
         monkeypatch.setenv("JOURNAL_STREAM", "some_value")
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-        assert should_use_colors() is False
-
-    def test_returns_false_when_invocation_id_set(self, monkeypatch):
-        """Test that colors are disabled when INVOCATION_ID is set."""
-        monkeypatch.setenv("INVOCATION_ID", "some_id")
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-        assert should_use_colors() is False
-
-    def test_returns_false_when_both_systemd_vars_set(self, monkeypatch):
-        """Test that colors are disabled when both systemd variables are set."""
-        monkeypatch.setenv("JOURNAL_STREAM", "some_value")
-        monkeypatch.setenv("INVOCATION_ID", "some_id")
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-        assert should_use_colors() is False
-
-    def test_returns_false_when_not_tty(self, monkeypatch):
-        """Test that colors are disabled when stdout is not a TTY."""
-        monkeypatch.delenv("JOURNAL_STREAM", raising=False)
         monkeypatch.delenv("INVOCATION_ID", raising=False)
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
-        assert should_use_colors() is False
+        assert is_running_under_systemd() is True
 
-    def test_returns_true_when_tty_and_no_systemd(self, monkeypatch):
-        """Test that colors are enabled when stdout is TTY and not under systemd."""
+    def test_invocation_id_present(self, monkeypatch):
+        """Test detection when INVOCATION_ID is set."""
         monkeypatch.delenv("JOURNAL_STREAM", raising=False)
-        monkeypatch.delenv("INVOCATION_ID", raising=False)
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-        assert should_use_colors() is True
+        monkeypatch.setenv("INVOCATION_ID", "some_uuid")
+        assert is_running_under_systemd() is True
 
-    def test_systemd_vars_take_precedence_over_tty(self, monkeypatch):
-        """Test that systemd detection takes precedence over TTY check."""
+    def test_both_env_vars_present(self, monkeypatch):
+        """Test detection when both environment variables are set."""
         monkeypatch.setenv("JOURNAL_STREAM", "some_value")
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
-        assert should_use_colors() is False
+        monkeypatch.setenv("INVOCATION_ID", "some_uuid")
+        assert is_running_under_systemd() is True
+
+    def test_no_systemd_env_vars(self, clean_environment):
+        """Test when no systemd environment variables are present."""
+        assert is_running_under_systemd() is False
+
+    def test_empty_env_vars(self, monkeypatch):
+        """Test when environment variables are empty strings."""
+        monkeypatch.setenv("JOURNAL_STREAM", "")
+        monkeypatch.setenv("INVOCATION_ID", "")
+        assert is_running_under_systemd() is False
+
+
+class TestIsStdoutTty:
+    """Tests for is_stdout_tty function."""
+
+    def test_stdout_is_tty(self, mock_tty_true):
+        """Test when stdout is a TTY."""
+        assert is_stdout_tty() is True
+
+    def test_stdout_is_not_tty(self, mock_tty_false):
+        """Test when stdout is not a TTY."""
+        assert is_stdout_tty() is False
 
 
 class TestSetupLogging:
-    """Test cases for setup_logging function."""
+    """Tests for setup_logging function."""
 
-    def setup_method(self):
-        """Reset logging configuration before each test."""
-        # Clear any existing handlers
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-        logging.root.setLevel(logging.WARNING)
+    def test_default_setup_interactive_tty(self, reset_logging, interactive_environment):
+        """Test default setup in interactive TTY environment."""
+        handler = setup_logging()
 
-    def test_default_parameters(self, monkeypatch):
-        """Test setup_logging with default parameters."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+        assert isinstance(handler, colorlog.StreamHandler)
+        assert handler.stream == sys.stdout
+        assert INTERACTIVE_FORMAT in handler.formatter._fmt  # pyright: ignore[reportOperatorIssue, reportOptionalMemberAccess], pylint: disable=protected-access
+        assert handler.formatter.no_color is False  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+        assert logging.getLogger().level == logging.INFO
 
-        with patch("logging.basicConfig") as mock_basicConfig:
-            handler = setup_logging()
-            # Verify handler is StreamHandler with stdout
-            assert isinstance(handler, colorlog.StreamHandler)
-            assert handler.stream is sys.stdout
-            # Verify formatter configuration
-            formatter = handler.formatter
-            assert isinstance(formatter, colorlog.ColoredFormatter)
-            assert formatter._style._fmt == "%(log_color)s%(asctime)s %(levelname)-8s %(message)s"
-            assert formatter.datefmt == "%Y-%m-%d %H:%M:%S"
-            assert formatter.no_color is False
-            # Verify basicConfig was called correctly
-            mock_basicConfig.assert_called_once_with(level=logging.INFO, handlers=[handler])
+    def test_setup_under_systemd(self, reset_logging, systemd_environment, mock_tty_true):
+        """Test setup when running under systemd."""
+        handler = setup_logging()
 
-    def test_with_file_output(self, monkeypatch):
-        """Test setup_logging with file output."""
-        mock_file = StringIO()
+        assert isinstance(handler, colorlog.StreamHandler)
+        assert handler.stream == sys.stdout
+        assert SYSTEMD_FORMAT in handler.formatter._fmt  # pyright: ignore[reportOperatorIssue, reportOptionalMemberAccess], pylint: disable=protected-access
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-        with patch("builtins.open", mock_open()) as mock_open_func:
-            mock_open_func.return_value = mock_file
+    def test_setup_redirected_output(self, reset_logging, clean_environment, mock_tty_false):
+        """Test setup when output is redirected (not TTY)."""
+        handler = setup_logging()
 
-            with patch("logging.basicConfig") as mock_basicConfig:
-                handler = setup_logging(log_file="/path/to/logfile.log")
-                # Verify file was opened correctly
-                mock_open_func.assert_called_once_with("/path/to/logfile.log", "a", encoding="utf8")
-                # Verify handler uses file stream
-                assert handler.stream is mock_file
-                # Verify colors are disabled for file output
-                assert handler.formatter.no_color is True
-                mock_basicConfig.assert_called_once_with(level=logging.INFO, handlers=[handler])
+        assert isinstance(handler, colorlog.StreamHandler)
+        assert handler.stream == sys.stdout
+        assert REDIRECTED_FORMAT in handler.formatter._fmt  # pyright: ignore[reportOperatorIssue, reportOptionalMemberAccess], pylint: disable=protected-access
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-    def test_no_color_parameter_true(self, monkeypatch):
-        """Test setup_logging with no_color=True."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+    def test_setup_with_file_logging(self, reset_logging, interactive_environment, tmp_path):
+        """Test setup with file logging."""
+        log_file = tmp_path / "test.log"
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging(no_color=True)
-            assert handler.formatter.no_color is True
+        handler = setup_logging(log_file=str(log_file))
 
-    def test_no_color_parameter_false_uses_should_use_colors(self, monkeypatch):
-        """Test that no_color=False uses should_use_colors() result."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: False)
+        assert isinstance(handler, colorlog.StreamHandler)
+        assert handler.stream.name == str(log_file)
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging(no_color=False)
-            assert handler.formatter.no_color is True
+        # Clean up
+        handler.stream.close()
 
-    def test_should_use_colors_returns_true(self, monkeypatch):
-        """Test that colors are enabled when should_use_colors returns True."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+    def test_setup_with_explicit_no_color(self, reset_logging, interactive_environment):
+        """Test setup with explicitly disabled colors."""
+        handler = setup_logging(no_color=True)
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging()
-            assert handler.formatter.no_color is False
+    def test_setup_with_custom_level(self, reset_logging, interactive_environment):
+        """Test setup with custom logging level."""
+        setup_logging(level=logging.DEBUG)
+        assert logging.getLogger().level == logging.DEBUG
 
-    def test_custom_log_level(self, monkeypatch):
-        """Test setup_logging with custom log level."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+    def test_file_opened_with_correct_params(self, reset_logging, tmp_path):
+        """Test that log file is opened with correct parameters."""
+        log_file = tmp_path / "test.log"
+        with patch("builtins.open", mock_open()) as mock_file:
+            setup_logging(log_file=str(log_file))
+            mock_file.assert_called_once_with(str(log_file), "a", encoding="utf8")
 
-        with patch("logging.basicConfig") as mock_basicConfig:
-            setup_logging(level=logging.DEBUG)
-            mock_basicConfig.assert_called_once()
-            call_args = mock_basicConfig.call_args
-            assert call_args.kwargs["level"] == logging.DEBUG
+    def test_formatter_datetime_format(self, reset_logging, interactive_environment):
+        """Test that formatter uses correct datetime format."""
+        handler = setup_logging()
+        assert handler.formatter.datefmt == "%Y-%m-%d %H:%M:%S"  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-    def test_file_output_forces_no_color_regardless_of_should_use_colors(self, monkeypatch):
-        """Test that file output always disables colors regardless of should_use_colors."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+    def test_no_color_overrides_auto_detection(self, reset_logging, interactive_environment):
+        """Test that explicit no_color=True overrides auto-detection."""
+        handler = setup_logging(no_color=True)
 
-        mock_file = StringIO()
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-        with patch("builtins.open", mock_open()) as mock_open_func:
-            mock_open_func.return_value = mock_file
+    def test_no_color_false_allows_auto_detection(self, reset_logging, systemd_environment, mock_tty_true):
+        """Test that explicit no_color=False still allows auto-detection."""
+        handler = setup_logging(no_color=False)
 
-            with patch("logging.basicConfig"):
-                handler = setup_logging(log_file="/path/to/logfile.log")
-                # Colors should be disabled for file output even if should_use_colors returns True
-                assert handler.formatter.no_color is True
+        # Should still be True due to systemd detection
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-    def test_handler_stream_configuration(self, monkeypatch):
-        """Test that handler stream is configured correctly."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
+    def test_file_logging_forces_no_color(self, reset_logging, interactive_environment, tmp_path):
+        """Test that file logging always disables colors."""
+        log_file = tmp_path / "test.log"
 
-        # Test stdout configuration
-        with patch("logging.basicConfig"):
-            handler = setup_logging()
-            assert handler.stream is sys.stdout
+        handler = setup_logging(log_file=str(log_file), no_color=False)
 
-        # Test file configuration
-        mock_file = StringIO()
-        with patch("builtins.open", mock_open()) as mock_open_func:
-            mock_open_func.return_value = mock_file
+        assert handler.formatter.no_color is True   # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
 
-            with patch("logging.basicConfig"):
-                handler = setup_logging(log_file="/path/to/logfile.log")
-                assert handler.stream is mock_file
+        # Clean up
+        handler.stream.close()
 
-    def test_formatter_date_format(self, monkeypatch):
-        """Test that formatter uses correct date format."""
-        monkeypatch.setattr(sf800p2mqtt.utils.logging, "should_use_colors", lambda: True)
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging()
-            assert handler.formatter.datefmt == "%Y-%m-%d %H:%M:%S"
+class TestIntegration:
+    """Integration tests for the logging module."""
 
-    def test_integration_with_should_use_colors(self, monkeypatch):
-        """Test integration between setup_logging and should_use_colors."""
-        # Test when systemd environment is detected
-        monkeypatch.setenv("JOURNAL_STREAM", "some_value")
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    def test_logging_works_after_setup(self, reset_logging, interactive_environment, capsys):
+        """Test that logging actually works after setup."""
+        setup_logging(level=logging.INFO)
+        logger = logging.getLogger(__name__)
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging()
-            # Colors should be disabled due to systemd detection
-            assert handler.formatter.no_color is True
+        logger.info("Test message")
 
-        # Test when no systemd and TTY
+        captured = capsys.readouterr()
+        assert "Test message" in captured.out
+        assert "INFO" in captured.out
+
+    def test_file_logging_works(self, reset_logging, tmp_path):
+        """Test that file logging actually writes to file."""
+        log_file = tmp_path / "test.log"
+
+        handler = setup_logging(log_file=str(log_file), level=logging.INFO)
+        logger = logging.getLogger(__name__)
+
+        logger.info("Test file message")
+        handler.stream.flush()  # Ensure data is written
+
+        assert log_file.exists()
+        content = log_file.read_text()
+        assert "Test file message" in content
+        assert "INFO" in content
+
+        # Clean up
+        handler.stream.close()
+
+    def test_debug_level_filtering(self, reset_logging, interactive_environment, capsys):
+        """Test that debug messages are filtered when level is INFO."""
+        setup_logging(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+
+        logger.debug("Debug message")
+        logger.info("Info message")
+
+        captured = capsys.readouterr()
+        assert "Debug message" not in captured.out
+        assert "Info message" in captured.out
+
+    def test_multiple_log_calls(self, reset_logging, interactive_environment, capsys):
+        """Test multiple logging calls with different levels."""
+        setup_logging(level=logging.DEBUG)
+        logger = logging.getLogger(__name__)
+
+        logger.debug("Debug message")
+        logger.info("Info message")
+        logger.warning("Warning message")
+        logger.error("Error message")
+
+        captured = capsys.readouterr()
+        assert "Debug message" in captured.out
+        assert "Info message" in captured.out
+        assert "Warning message" in captured.out
+        assert "Error message" in captured.out
+
+
+class TestEdgeCases:
+    """Test edge cases and error conditions."""
+
+    def test_multiple_setup_calls(self, reset_logging, interactive_environment):
+        """Test that multiple setup calls work correctly."""
+        setup_logging(level=logging.DEBUG)
+        handler2 = setup_logging(level=logging.INFO)
+
+        # Should have replaced the handler
+        root_logger = logging.getLogger()
+        assert len(root_logger.handlers) == 1
+        assert root_logger.level == logging.INFO
+
+        # Handler2 should be the active one
+        assert handler2 in root_logger.handlers
+
+    def test_nonexistent_log_file_directory(self, reset_logging, tmp_path):
+        """Test creating log file in non-existent directory."""
+        log_dir = tmp_path / "nonexistent"
+        log_file = log_dir / "test.log"
+
+        # This should fail because the directory doesn't exist
+        with pytest.raises(FileNotFoundError):
+            setup_logging(log_file=str(log_file))
+
+    def test_file_permissions_error(self, reset_logging, tmp_path, monkeypatch):
+        """Test handling of file permission errors."""
+        log_file = tmp_path / "test.log"
+
+        # Mock open to raise PermissionError
+        def mock_open_permission_error(*args, **kwargs):
+            if args[0] == str(log_file):
+                raise PermissionError("Permission denied")
+            return open(*args, **kwargs)    # pylint: disable=unspecified-encoding
+
+        monkeypatch.setattr("builtins.open", mock_open_permission_error)
+
+        with pytest.raises(PermissionError):
+            setup_logging(log_file=str(log_file))
+
+
+# ============================================================================
+# PARAMETRIZED TESTS
+# ============================================================================
+
+@pytest.mark.parametrize("level,level_name", [
+    (logging.DEBUG, "DEBUG"),
+    (logging.INFO, "INFO"),
+    (logging.WARNING, "WARNING"),
+    (logging.ERROR, "ERROR"),
+    (logging.CRITICAL, "CRITICAL"),
+])
+def test_different_log_levels(level, level_name, reset_logging, interactive_environment, capsys):
+    """Test setup with different log levels."""
+    setup_logging(level=level)
+    logger = logging.getLogger(__name__)
+
+    # Log at the specified level
+    logger.log(level, "Test %s message", level_name)
+
+    captured = capsys.readouterr()
+    assert f"Test {level_name} message" in captured.out
+    assert level_name in captured.out
+
+
+@pytest.mark.parametrize("env_var,env_value,expected", [
+    ("JOURNAL_STREAM", "value", True),
+    ("INVOCATION_ID", "uuid-value", True),
+    ("JOURNAL_STREAM", "", False),
+    ("INVOCATION_ID", "", False),
+])
+def test_systemd_detection_parametrized(env_var, env_value, expected, monkeypatch):
+    """Test systemd detection with various environment variable values."""
+    # Clean environment first
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+
+    # Set the specific environment variable
+    if env_value:
+        monkeypatch.setenv(env_var, env_value)
+
+    assert is_running_under_systemd() is expected
+
+
+@pytest.mark.parametrize("is_systemd,is_tty,expected_format,expected_no_color", [
+    (False, True, INTERACTIVE_FORMAT, False),   # Interactive terminal
+    (True, True, SYSTEMD_FORMAT, True),         # Systemd service
+    (False, False, REDIRECTED_FORMAT, True),    # Redirected output
+    (True, False, SYSTEMD_FORMAT, True),        # Systemd + redirected (systemd wins)
+])
+def test_format_selection_parametrized(is_systemd, is_tty, expected_format, expected_no_color,
+                                       reset_logging, monkeypatch):
+    """Test format selection based on environment conditions."""
+    # Mock systemd detection
+    if is_systemd:
+        monkeypatch.setenv("JOURNAL_STREAM", "value")
+    else:
         monkeypatch.delenv("JOURNAL_STREAM", raising=False)
         monkeypatch.delenv("INVOCATION_ID", raising=False)
-        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
 
-        with patch("logging.basicConfig"):
-            handler = setup_logging()
-            # Colors should be enabled
-            assert handler.formatter.no_color is False
+    # Mock TTY detection
+    monkeypatch.setattr("sys.stdout.isatty", lambda: is_tty)
+
+    handler = setup_logging()
+
+    assert expected_format in handler.formatter._fmt  # pyright: ignore[reportOptionalMemberAccess], pylint: disable=protected-access
+    assert handler.formatter.no_color is expected_no_color  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+
+
+# ============================================================================
+# PERFORMANCE TESTS
+# ============================================================================
+
+def test_setup_performance(reset_logging, interactive_environment):
+    """Test that setup_logging performs reasonably fast."""
+    import time     # pylint: disable=import-outside-toplevel
+
+    start_time = time.time()
+    setup_logging()
+    end_time = time.time()
+
+    # Setup should complete in less than 100ms
+    assert (end_time - start_time) < 0.1
+
+
+# ============================================================================
+# PROPERTY-BASED TESTS
+# ============================================================================
+
+@pytest.mark.parametrize("log_level", [
+    logging.NOTSET, logging.DEBUG, logging.INFO,
+    logging.WARNING, logging.ERROR, logging.CRITICAL
+])
+def test_all_valid_log_levels(log_level, reset_logging, interactive_environment):
+    """Test setup with all valid logging levels."""
+    handler = setup_logging(level=log_level)
+
+    assert isinstance(handler, colorlog.StreamHandler)
+    assert logging.getLogger().level == log_level
+
+
+def test_handler_cleanup_on_multiple_setups(reset_logging, interactive_environment):
+    """Test that handlers are properly cleaned up on multiple setups."""
+    # First setup
+    setup_logging()
+    initial_handler_count = len(logging.getLogger().handlers)
+
+    # Multiple additional setups
+    for _ in range(5):
+        setup_logging()
+
+    # Should still have the same number of handlers (old ones removed)
+    final_handler_count = len(logging.getLogger().handlers)
+    assert final_handler_count == initial_handler_count

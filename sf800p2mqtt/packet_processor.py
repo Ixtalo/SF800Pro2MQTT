@@ -15,6 +15,15 @@ from scapy.contrib.mqtt import MQTT
 from .config import Config
 
 
+def _is_corrupted_topic(topic: str) -> bool:
+    """Check if topic contains JSON payload fragments indicating corruption."""
+    corruption_indicators = [
+        '"deviceId":',
+        '"packData":[{"sn":',
+    ]
+    return any(indicator in topic for indicator in corruption_indicators)
+
+
 class InvalidMqttPacketError(Exception):
     """Custom exception raised when an MQTT packet is invalid or malformed."""
 
@@ -77,14 +86,12 @@ class PacketProcessor:
         topic = getattr(mqtt_pkt, "topic", None)
         if topic is None:
             logging.warning("MQTT packet without topic field: %s", mqtt_pkt.fields)
-            return None, None
+            raise InvalidMqttPacketError("no-topic")
         if isinstance(topic, bytes):
             try:
                 topic = topic.decode("utf8")
             except UnicodeDecodeError as ex:
-                # do not raise exception, just log it and ignore the packet
-                logging.exception(ex)
-                return None, None
+                raise InvalidMqttPacketError("topic-decode-problem") from ex
 
         # do not do "payload = mqtt_pkt.payload.value" because it could fail for faulty packets
         payload = getattr(mqtt_pkt, "payload", None)
@@ -100,7 +107,13 @@ class PacketProcessor:
             logging.warning("Payload decode failed for topic '%s': %s", topic, ex)
             raise InvalidMqttPacketError("payload-decode") from ex
         except json.JSONDecodeError as ex:
-            logging.warning("Could not JSON decode payload for topic '%s': %s", topic, ex)
+            if _is_corrupted_topic(topic):
+                # sometimes the topic is garbaged with parts of the MQTT payload
+                # just log it with DEBUG level
+                log_func = logging.debug
+            else:
+                log_func = logging.warning
+            log_func("Could not JSON decode payload for topic '%s': %s", topic, ex)
             raise InvalidMqttPacketError("payload-json") from ex
 
         if not payload_json:

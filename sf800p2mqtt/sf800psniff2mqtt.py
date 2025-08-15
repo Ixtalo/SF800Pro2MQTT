@@ -73,9 +73,9 @@ from .packet_processor import PacketProcessor
 from .utils.logging import setup_logging
 
 __appname__ = "SF800Pro2MQTT"
-__version__ = "1.10.4"
+__version__ = "1.11.1"
 __date__ = "2025-07-01"
-__updated__ = "2025-08-10"
+__updated__ = "2025-08-14"
 __author__ = "Ixtalo"
 __email__ = "ixtalo@gmail.com"
 __license__ = "AGPL-3.0+"
