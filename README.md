@@ -1,4 +1,14 @@
-# SolarFlow 800 Pro to Mqtt (via network traffic sniffing)
+-------------------------------------
+# 
+# !! DEPRECATED !!
+# 
+# Superseeded by https://github.com/Zendure/zenSDK and newest firmware versions (since 08/2025).
+# 
+# !! DEPRECATED !!
+# 
+-------------------------------------
+
+# ~~SolarFlow 800 Pro to Mqtt (via network traffic sniffing)~~
 
 Capture TCP traffic from a SolarFlow 800 Pro solar battery and
 extract information for publishing to an own (local) MQTT broker.
